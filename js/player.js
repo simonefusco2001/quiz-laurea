@@ -218,6 +218,9 @@
     fitQuestion();
   }
   setAppHeight();
+  // i caratteri del titolo arrivano dopo e allungano il testo: si riadatta quando sono pronti
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitQuestion);
+  window.addEventListener("load", fitQuestion);
   window.addEventListener("resize", setAppHeight);
   window.addEventListener("orientationchange", () => setTimeout(setAppHeight, 300));
   if (window.visualViewport) window.visualViewport.addEventListener("resize", setAppHeight);
