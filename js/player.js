@@ -144,6 +144,7 @@
       </section>`);
 
     fitQuestion();
+    setTimeout(fitQuestion, 300); // secondo controllo, a schermata assestata
 
     // Si può cambiare risposta quante volte si vuole: conta solo quando si preme Conferma
     // (i punti dipendono dal momento della conferma).
