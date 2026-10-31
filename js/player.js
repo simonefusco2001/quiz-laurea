@@ -17,6 +17,7 @@
   let viewKey = "";
   let ticker = null;
   let lobbyPoll = null;
+  let autoSend = null; // invio automatico della risposta selezionata ma non confermata
 
   const header = () => `<div class="q-head"><span class="pill nowrap">🎓 Quiz di Simone</span>${myName ? `<span class="pill nowrap" style="background:#fff;max-width:50%;overflow:hidden;text-overflow:ellipsis">${C.esc(myName)}</span>` : ""}</div>`;
   // Riga compatta per domanda/attesa/esito: numero domanda, nome, timer (facoltativo)
@@ -28,7 +29,7 @@
     </div>
     ${withTimer ? '<div class="timebar"><div id="bar"></div></div>' : ""}`;
   const show = (html) => { main.innerHTML = html; window.scrollTo(0, 0); };
-  const stopTimers = () => { clearInterval(ticker); clearInterval(lobbyPoll); ticker = lobbyPoll = null; };
+  const stopTimers = () => { clearInterval(ticker); clearInterval(lobbyPoll); clearTimeout(autoSend); ticker = lobbyPoll = autoSend = null; };
 
   function preloadImages() {
     Q.forEach((q) => { const i = new Image(); i.src = q.img; });
@@ -139,30 +140,61 @@
         <h2 class="q-text">${C.esc(q.q)}</h2>
         <div class="img-wrap"><img src="${q.img}" alt=""></div>
         <div class="answers" id="answers">${q.a.map((a, i) => C.answerButton(i, a)).join("")}</div>
+        <button class="btn confirm" id="confirm" disabled>Scegli una risposta</button>
       </section>`);
 
+    // Sui telefoni piccolissimi la foto diventerebbe una striscia: meglio toglierla
+    requestAnimationFrame(() => {
+      const w = document.querySelector(".img-wrap");
+      if (w && w.getBoundingClientRect().height < 60) w.style.display = "none";
+    });
+
+    // Si può cambiare risposta quante volte si vuole: conta solo quando si preme Conferma
+    // (i punti dipendono dal momento della conferma).
     const buttons = [...document.querySelectorAll(".ans")];
+    const confirmBtn = document.getElementById("confirm");
+    let selected = null;
+    let sending = false;
+
+    const send = async () => {
+      if (sending || selected === null || answered[qi] !== undefined) return;
+      sending = true;
+      clearTimeout(autoSend);
+      buttons.forEach((x) => { x.disabled = true; });
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Invio…";
+      try {
+        const ok = await C.rpc("submit_answer", { p_player: pid, p_choice: selected });
+        if (!ok) { stopTimers(); return renderWaiting(s, null, "Troppo tardi! ⏰"); }
+        answered[qi] = selected;
+        store.set("quiz_answered", answered);
+        renderWaiting(s, selected);
+      } catch (_) {
+        sending = false;
+        if (C.remaining(s) <= 0) return renderWaiting(s, null, "Connessione persa 😢");
+        buttons.forEach((x) => { x.disabled = false; });
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Connessione lenta: riprova";
+      }
+    };
+
     tick(s, () => {
+      if (sending) return;
       buttons.forEach((b) => { b.disabled = true; b.classList.add("dim"); });
       renderWaiting(s, null);
     });
 
-    buttons.forEach((b) => b.addEventListener("click", async () => {
-      if (C.remaining(s) <= 0 || answered[qi] !== undefined) return;
-      const choice = Number(b.dataset.i);
-      buttons.forEach((x) => { x.disabled = true; if (x !== b) x.classList.add("dim"); });
-      b.classList.add("chosen");
-      try {
-        const ok = await C.rpc("submit_answer", { p_player: pid, p_choice: choice });
-        if (!ok) { stopTimers(); return renderWaiting(s, null, "Troppo tardi! ⏰"); }
-        answered[qi] = choice;
-        store.set("quiz_answered", answered);
-        renderWaiting(s, choice);
-      } catch (_) {
-        buttons.forEach((x) => { x.disabled = false; x.classList.remove("dim", "chosen"); });
-        alert("Connessione lenta: risposta non inviata, riprova!");
-      }
+    buttons.forEach((b) => b.addEventListener("click", () => {
+      if (sending || C.remaining(s) <= 0 || answered[qi] !== undefined) return;
+      selected = Number(b.dataset.i);
+      buttons.forEach((x) => { x.classList.toggle("chosen", x === b); x.classList.toggle("dim", x !== b); });
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "Conferma risposta ✔";
     }));
+    confirmBtn.addEventListener("click", send);
+
+    // Chi ha scelto ma non ha confermato: la risposta parte da sola un attimo prima dello scadere
+    autoSend = setTimeout(send, Math.max(0, (C.remaining(s) - 0.8) * 1000));
   }
 
   // Timer con barra; onEnd scatta quando il tempo finisce.

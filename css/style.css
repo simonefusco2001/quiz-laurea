@@ -138,6 +138,9 @@ button, .ans { touch-action: manipulation; }
 .ans[data-i="3"] { background: var(--a3); }
 .ans.dim { opacity: .3; }
 .ans.chosen { outline: 4px solid var(--ink); outline-offset: 2px; }
+.answers .ans.chosen:not(:disabled) { opacity: 1; transform: scale(1.02); }
+.btn.confirm { flex: none; background: var(--ink); color: var(--white); box-shadow: 4px 4px 0 var(--coral); padding: 12px; }
+.btn.confirm:disabled { background: var(--white); color: var(--ink); box-shadow: none; opacity: .6; }
 .ans.correct { opacity: 1; }
 .ans .tick { margin-left: auto; font-size: 22px; }
 
