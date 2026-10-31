@@ -1,4 +1,5 @@
-// Pannello del conduttore: QR, avvio, domande, risposta giusta, podio, ricomincia.
+// Pannello del conduttore (pensato per il telefono): QR, avvio, domande, risposta giusta, podio, ricomincia.
+// Il pulsante principale sta sempre in basso, a portata di pollice.
 (function () {
   const C = window.Quiz;
   const Q = window.QUESTIONS;
@@ -6,14 +7,14 @@
   const playerUrl = new URL("./", location.href).href;
 
   let pin = sessionStorage.getItem("quiz_pin") || "";
-  let state = null;
   let viewKey = "";
   let timer = null;
   let statsPoll = null;
   let revealing = false;
 
-  const show = (html) => { main.innerHTML = html; };
+  const show = (html) => { main.innerHTML = html; window.scrollTo(0, 0); };
   const stop = () => { clearInterval(timer); clearInterval(statsPoll); timer = statsPoll = null; };
+  const $ = (id) => document.getElementById(id);
 
   async function act(btn, fn) {
     if (btn) btn.disabled = true;
@@ -25,22 +26,35 @@
   const reveal = () => C.rpc("host_reveal", { p_pin: pin });
   const setPhase = (p) => C.rpc("host_set_phase", { p_pin: pin, p_phase: p });
 
-  function footer() {
+  // Menu "Altro" chiuso in fondo: link, pausa, ricomincia (cose che servono di rado)
+  function more(withPause) {
     return `
-      <div class="card small" style="margin-top:auto">
-        <p style="margin-bottom:8px"><b>Link del quiz:</b> <a href="${playerUrl}" target="_blank">${C.esc(playerUrl)}</a></p>
-        <button class="btn danger" id="reset">Ricomincia da zero</button>
-      </div>`;
+      <details class="more">
+        <summary>Altro</summary>
+        <div class="more-body">
+          <p class="small">Link per i giocatori:<br><a href="${playerUrl}" target="_blank">${C.esc(playerUrl)}</a></p>
+          ${withPause ? '<button class="btn white" id="pause">Pausa (tutti in sala d\'attesa)</button>' : ""}
+          <button class="btn danger" id="reset">Ricomincia da zero</button>
+        </div>
+      </details>`;
   }
-  function bindFooter() {
-    const b = document.getElementById("reset");
-    if (!b) return;
-    b.addEventListener("click", () => {
+  function bindMore() {
+    const p = $("pause");
+    if (p) p.addEventListener("click", () => act(p, () => setPhase("lobby")));
+    const b = $("reset");
+    if (b) b.addEventListener("click", () => {
       const ok = prompt("Cancella giocatori e punteggi e torna all'inizio.\nScrivi RESET per confermare.");
       if (ok !== "RESET") return;
       act(b, async () => { await C.rpc("host_reset", { p_pin: pin }); viewKey = ""; });
     });
   }
+
+  const top = (left, mid, withTimer, s) => `
+    <div class="q-top">
+      <span class="pill">${left}</span>
+      <span class="q-name">${mid}</span>
+      ${withTimer ? `<div class="timer" id="t">${Math.ceil(C.remaining(s))}</div>` : ""}
+    </div>`;
 
   // ---------- Accesso ----------
   function showLogin(msg = "") {
@@ -49,14 +63,14 @@
         <span class="pill">🎬 Regia</span>
         <h1 class="big-title">Pannello di Simone</h1>
         <form id="login" class="card" style="width:100%;display:flex;flex-direction:column;gap:12px">
-          <input id="pin" type="password" placeholder="PIN del conduttore" required>
+          <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN del conduttore" required>
           <p class="error">${C.esc(msg)}</p>
           <button class="btn" type="submit">Entra</button>
         </form>
       </section>`);
-    document.getElementById("login").addEventListener("submit", async (e) => {
+    $("login").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const p = document.getElementById("pin").value.trim();
+      const p = $("pin").value.trim();
       try {
         const ok = await C.rpc("host_check", { p_pin: p });
         if (!ok) return showLogin("PIN sbagliato");
@@ -69,7 +83,6 @@
   function start() { viewKey = ""; C.keepAwake(); C.watchState(render); }
 
   function render(s) {
-    state = s;
     const key = `${s.phase}|${s.q_index}|${s.q_started_at}`;
     if (key === viewKey) return;
     viewKey = key;
@@ -84,40 +97,43 @@
   // ---------- Sala d'attesa ----------
   function renderLobby(s) {
     const resume = s.q_index >= 0;
+    const next = resume ? s.q_index + 1 : 0;
+    const label = resume ? (next >= Q.length ? "🏆 Mostra il podio" : `Riprendi dalla domanda ${next + 1}`) : "▶ Avvia il quiz";
     show(`
-      <section class="screen">
-        <div class="q-head"><span class="pill">🎬 Regia</span><span class="pill" style="background:#fff"><b id="count">0</b> giocatori</span></div>
-        <div class="card" style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px">
-          <h2>Inquadra per giocare</h2>
-          <div class="qr" id="qr"></div>
-          <button class="btn yellow" id="dl">Scarica il QR</button>
+      <section class="screen host">
+        ${top("🎬 Regia", resume ? "In pausa" : "Sala d'attesa", false)}
+        <div class="card count-card">
+          <p class="bignum" id="count">0</p>
+          <p class="small muted">giocatori dentro</p>
         </div>
         <div class="card"><div class="names" id="names"><span class="muted">Ancora nessuno</span></div></div>
-        <button class="btn" id="go">${resume ? `Riprendi dalla domanda ${s.q_index + 2}` : "Avvia il quiz"}</button>
-        ${footer()}
+        <div class="card lobby-qr">
+          <div class="qr" id="qr"></div>
+          <div class="lobby-qr-text">
+            <b>Fate inquadrare il QR</b>
+            <span class="small muted">a chi non l'ha ancora ricevuto</span>
+            <button class="btn yellow slim" id="dl">Scarica QR</button>
+          </div>
+        </div>
+        ${more(false)}
+        <div class="actionbar"><button class="btn" id="go">${label}</button></div>
       </section>`);
-    new QRCode(document.getElementById("qr"), { text: playerUrl, width: 440, height: 440, correctLevel: QRCode.CorrectLevel.M });
-    document.getElementById("dl").addEventListener("click", downloadQr);
-    document.getElementById("go").addEventListener("click", (e) => act(e.target, async () => {
-      const next = resume ? s.q_index + 1 : 0;
-      if (next >= Q.length) await setPhase("podium"); else await startQuestion(next);
-    }));
-    bindFooter();
+    new QRCode($("qr"), { text: playerUrl, width: 400, height: 400, correctLevel: QRCode.CorrectLevel.M });
+    $("dl").addEventListener("click", downloadQr);
+    $("go").addEventListener("click", (e) => act(e.currentTarget, () => next >= Q.length ? setPhase("podium") : startQuestion(next)));
+    bindMore();
     const refresh = async () => {
       const { data } = await C.sb.from("players").select("name").order("created_at");
-      if (!data) return;
-      const c = document.getElementById("count"), n = document.getElementById("names");
-      if (!c || !n) return;
-      c.textContent = data.length;
-      n.innerHTML = data.length ? data.map((p) => `<span>${C.esc(p.name)}</span>`).join("") : '<span class="muted">Ancora nessuno</span>';
+      if (!data || !$("count")) return;
+      $("count").textContent = data.length;
+      $("names").innerHTML = data.length ? data.map((p) => `<span>${C.esc(p.name)}</span>`).join("") : '<span class="muted">Ancora nessuno</span>';
     };
     refresh();
     statsPoll = setInterval(refresh, 2000);
   }
 
   function downloadQr() {
-    const box = document.getElementById("qr");
-    const canvas = box.querySelector("canvas");
+    const canvas = $("qr").querySelector("canvas");
     // QR con margine bianco e titolo, pronto da mandare su WhatsApp
     const out = document.createElement("canvas");
     out.width = 600; out.height = 720;
@@ -140,17 +156,22 @@
   function renderQuestion(s) {
     const qi = s.q_index, q = Q[qi];
     show(`
-      <section class="screen">
-        <div class="q-head"><span class="pill">Domanda ${qi + 1} di ${Q.length}</span><div class="timer" id="t">${Math.ceil(C.remaining(s))}</div></div>
+      <section class="screen host">
+        ${top(`${qi + 1}/${Q.length}`, "Domanda in corso", true, s)}
         <div class="timebar"><div id="bar"></div></div>
         <h2 class="q-text">${C.esc(q.q)}</h2>
-        <img class="q-img" src="${q.img}" alt="">
-        <div class="card" style="text-align:center"><p class="small muted">Hanno risposto</p><p style="font-size:34px;font-weight:800"><span id="ans">0</span> / <span id="tot">0</span></p></div>
-        <button class="btn yellow" id="rev">Mostra la risposta ora</button>
-        ${footer()}
+        <div class="card count-card">
+          <p class="bignum"><span id="ans">0</span><span class="muted"> / <span id="tot">0</span></span></p>
+          <p class="small muted">hanno risposto</p>
+          <div class="progress"><div id="prog"></div></div>
+        </div>
+        <div class="answers mini">${q.a.map((a, i) => C.answerButton(i, a)).join("")}</div>
+        ${more(true)}
+        <div class="actionbar"><button class="btn yellow" id="rev">Mostra la risposta ora</button></div>
       </section>`);
-    document.getElementById("rev").addEventListener("click", (e) => act(e.target, reveal));
-    bindFooter();
+    document.querySelectorAll(".answers .ans").forEach((b) => { b.disabled = true; });
+    $("rev").addEventListener("click", (e) => act(e.currentTarget, reveal));
+    bindMore();
 
     let answered = 0, players = 0;
     const doReveal = () => {
@@ -160,7 +181,7 @@
     };
     const update = () => {
       const r = C.remaining(s);
-      const t = document.getElementById("t"), bar = document.getElementById("bar");
+      const t = $("t"), bar = $("bar");
       if (t) { t.textContent = Math.ceil(r); t.classList.toggle("low", r <= 5); }
       if (bar) bar.style.width = (100 * r / s.q_seconds) + "%";
       // si passa alla risposta quando scade il tempo (+1 s di margine) o hanno risposto tutti
@@ -171,9 +192,10 @@
       try {
         const rows = await C.rpc("host_answer_stats", { p_pin: pin }, 1);
         if (rows && rows[0]) { answered = rows[0].answered; players = rows[0].players; }
-        const a = document.getElementById("ans"), tt = document.getElementById("tot");
-        if (a) a.textContent = answered;
-        if (tt) tt.textContent = players;
+        if (!$("ans")) return;
+        $("ans").textContent = answered;
+        $("tot").textContent = players;
+        $("prog").style.width = (players ? 100 * answered / players : 0) + "%";
       } catch (_) { /* al prossimo giro */ }
     };
     update(); stats();
@@ -182,38 +204,59 @@
   }
 
   // ---------- Risposta giusta ----------
-  function renderReveal(s) {
+  async function renderReveal(s) {
     const qi = s.q_index, q = Q[qi];
     const last = qi >= Q.length - 1;
+    const nextQ = last ? null : Q[qi + 1];
     show(`
-      <section class="screen">
-        <span class="pill" style="align-self:flex-start">Domanda ${qi + 1} di ${Q.length}</span>
+      <section class="screen host">
+        ${top(`${qi + 1}/${Q.length}`, "Risposta", false)}
         <h2 class="q-text">${C.esc(q.q)}</h2>
-        <div class="answers">${q.a.map((a, i) => C.answerButton(i, a, i === s.correct ? "correct" : "dim")
-          .replace("</button>", i === s.correct ? '<span class="tick">✔</span></button>' : "</button>")).join("")}</div>
-        <button class="btn" id="next">${last ? "🏆 Mostra il podio" : `Prossima domanda (${qi + 2})`}</button>
-        <button class="btn white" id="pause">Pausa (torna alla sala d'attesa)</button>
-        ${footer()}
+        <div class="answers mini" id="rows">${rowsHtml(q, s.correct, null)}</div>
+        <p class="small muted" id="summary"></p>
+        ${more(true)}
+        <div class="actionbar">
+          ${nextQ ? `<p class="next-hint">Prossima: ${C.esc(nextQ.q)}</p>` : ""}
+          <button class="btn" id="next">${last ? "🏆 Mostra il podio" : `Prossima domanda (${qi + 2}) →`}</button>
+        </div>
       </section>`);
-    document.querySelectorAll(".ans").forEach((b) => { b.disabled = true; });
-    document.getElementById("next").addEventListener("click", (e) => act(e.target, () => last ? setPhase("podium") : startQuestion(qi + 1)));
-    document.getElementById("pause").addEventListener("click", (e) => act(e.target, () => setPhase("lobby")));
-    bindFooter();
+    document.querySelectorAll(".answers .ans").forEach((b) => { b.disabled = true; });
+    $("next").addEventListener("click", (e) => act(e.currentTarget, () => last ? setPhase("podium") : startQuestion(qi + 1)));
+    bindMore();
+
+    // quante persone hanno scelto ogni risposta
+    try {
+      const counts = await C.rpc("host_choice_counts", { p_pin: pin }, 2);
+      if (viewKey !== `${s.phase}|${s.q_index}|${s.q_started_at}` || !$("rows")) return;
+      const by = [0, 0, 0, 0];
+      (counts || []).forEach((r) => { by[r.choice] = r.n; });
+      const tot = by.reduce((a, b) => a + b, 0);
+      $("rows").innerHTML = rowsHtml(q, s.correct, by);
+      document.querySelectorAll(".answers .ans").forEach((b) => { b.disabled = true; });
+      $("summary").textContent = tot ? `${by[s.correct]} su ${tot} hanno indovinato` : "Nessuno ha risposto";
+    } catch (_) { /* il conteggio è un di più */ }
+  }
+
+  function rowsHtml(q, correct, counts) {
+    return q.a.map((a, i) => {
+      const extra = (i === correct ? '<span class="tick">✔</span>' : "") + (counts ? `<span class="cnt">${counts[i]}</span>` : "");
+      return C.answerButton(i, a, i === correct ? "correct" : "dim").replace("</button>", extra + "</button>");
+    }).join("");
   }
 
   // ---------- Podio ----------
   async function renderPodium() {
-    const top = await C.top(10);
+    const top10 = await C.top(10);
     show(`
-      <section class="screen">
-        <span class="pill" style="align-self:flex-start">🏆 Podio</span>
-        ${C.podiumHtml(top.slice(0, 3))}
-        <h3>Classifica (solo tu la vedi tutta)</h3>
-        ${C.boardHtml(top, "")}
-        ${footer()}
+      <section class="screen host">
+        ${top("🏆 Podio", "Fine del quiz", false)}
+        ${C.podiumHtml(top10.slice(0, 3))}
+        <h3>Classifica (la vedi solo tu)</h3>
+        ${C.boardHtml(top10, "")}
+        ${more(false)}
       </section>`);
     C.playPodium(main);
-    bindFooter();
+    bindMore();
   }
 
   // ---------- Avvio ----------
