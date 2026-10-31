@@ -143,11 +143,7 @@
         <button class="btn confirm" id="confirm" disabled>Scegli una risposta</button>
       </section>`);
 
-    // Sui telefoni piccolissimi la foto diventerebbe una striscia: meglio toglierla
-    requestAnimationFrame(() => {
-      const w = document.querySelector(".img-wrap");
-      if (w && w.getBoundingClientRect().height < 60) w.style.display = "none";
-    });
+    fitQuestion();
 
     // Si può cambiare risposta quante volte si vuole: conta solo quando si preme Conferma
     // (i punti dipendono dal momento della conferma).
@@ -196,6 +192,35 @@
     // Chi ha scelto ma non ha confermato: la risposta parte da sola un attimo prima dello scadere
     autoSend = setTimeout(send, Math.max(0, (C.remaining(s) - 0.8) * 1000));
   }
+
+  // Fa stare domanda, foto e risposte in una schermata su qualsiasi telefono:
+  // prima layout normale, poi risposte 2x2, poi testi più piccoli, la foto si toglie solo per ultima.
+  function fitQuestion() {
+    const fit = document.querySelector(".fit");
+    if (!fit || !document.querySelector(".img-wrap")) return;
+    const img = fit.querySelector(".img-wrap");
+    const imgH = () => img.getBoundingClientRect().height;
+    const overflows = () => fit.scrollHeight > fit.clientHeight + 1;
+    fit.classList.remove("compact", "tiny");
+    img.style.display = "";
+    if (imgH() >= 110 && !overflows()) return;
+    fit.classList.add("compact");
+    if (imgH() >= 80 && !overflows()) return;
+    fit.classList.add("tiny");
+    if (imgH() >= 60 && !overflows()) return;
+    img.style.display = "none"; // spazio troppo poco: meglio niente foto che una striscia
+  }
+
+  // Altezza reale visibile (Safari su iPhone ha barre che 100vh non considera)
+  function setAppHeight() {
+    const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
+    fitQuestion();
+  }
+  setAppHeight();
+  window.addEventListener("resize", setAppHeight);
+  window.addEventListener("orientationchange", () => setTimeout(setAppHeight, 300));
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", setAppHeight);
 
   // Timer con barra; onEnd scatta quando il tempo finisce.
   function tick(s, onEnd) {

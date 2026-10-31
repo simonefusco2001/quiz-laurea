@@ -12,7 +12,12 @@
   --a3: #26890c; /* quadrato */
   --shadow: 4px 4px 0 var(--ink);
   --radius: 14px;
+  --pad: 16px;
+  /* altezza davvero visibile: il JS la sovrascrive con window.innerHeight (Safari con le barre) */
+  --app-h: 100vh;
 }
+@supports (height: 100dvh) { :root { --app-h: 100dvh; } }
+@media (max-height: 640px) { :root { --pad: 10px; } }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -27,10 +32,9 @@ h1, h2, h3, .display { font-family: "Bricolage Grotesque", "Inter", sans-serif; 
 .app {
   max-width: 560px;
   margin: 0 auto;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding: 16px;
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  min-height: var(--app-h);
+  padding: var(--pad);
+  padding-bottom: max(var(--pad), env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -92,8 +96,24 @@ input[type="text"], input[type="password"] {
 .q-top { display: flex; align-items: center; gap: 10px; }
 .q-name { flex: 1; min-width: 0; text-align: center; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* schermata che sta tutta nel telefono, senza scorrere: la foto prende lo spazio che resta */
-.fit { height: calc(100vh - 32px); height: calc(100dvh - 32px); flex: none; gap: 10px; }
-.img-wrap { flex: 1 1 0; min-height: 0; border: 3px solid var(--ink); border-radius: var(--radius); overflow: hidden; background: #eee; }
+.fit {
+  height: calc(var(--app-h) - var(--pad) - max(var(--pad), env(safe-area-inset-bottom)));
+  flex: none; gap: 10px; min-height: 0;
+}
+.img-wrap { flex: 1 1 0; min-height: 0; max-height: 42vh; border: 3px solid var(--ink); border-radius: var(--radius); overflow: hidden; background: #eee; }
+.fit .answers { margin-top: auto; } /* sui telefoni alti le risposte restano in basso, vicino al pollice */
+/* Livello 1, schermo basso: risposte 2x2 e testi più piccoli */
+.fit.compact { gap: 8px; }
+.fit.compact .q-text { font-size: clamp(16px, 4.6vw, 20px); }
+.fit.compact .answers { grid-template-columns: 1fr 1fr; gap: 8px; }
+.fit.compact .ans { flex-direction: column; align-items: flex-start; gap: 4px; min-height: 66px; padding: 8px 10px; font-size: 14px; box-shadow: 3px 3px 0 var(--ink); }
+.fit.compact .ans .shape, .fit.compact .ans .shape svg { width: 16px; height: 16px; flex-basis: auto; }
+.fit.compact .timer { min-width: 42px; height: 42px; font-size: 17px; }
+.fit.compact .btn.confirm { padding: 10px; font-size: 16px; }
+/* Livello 2, schermo bassissimo (o telefono in orizzontale): anche meno spazio fra le cose */
+.fit.tiny .q-text { font-size: 15px; }
+.fit.tiny .ans { min-height: 54px; font-size: 13px; }
+.fit.tiny .timebar { height: 6px; }
 .img-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .label { margin-bottom: -4px; }
 .result .gain { font-size: 22px; font-weight: 800; }
@@ -186,6 +206,14 @@ button, .ans { touch-action: manipulation; }
 .podium .p1 .block { height: 170px; background: var(--yellow); }
 .podium .p2 .block { height: 120px; background: #d9d9d9; }
 .podium .p3 .block { height: 90px; background: #e0a96d; }
+@media (max-height: 640px) {
+  .podium { min-height: 0; margin-top: 4px; }
+  .podium .p1 .block { height: 116px; }
+  .podium .p2 .block { height: 84px; }
+  .podium .p3 .block { height: 62px; }
+  .podium .block { font-size: 30px; }
+  .big-title { font-size: 26px; }
+}
 
 /* Lobby */
 .names { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-height: 34vh; overflow-y: auto; }
