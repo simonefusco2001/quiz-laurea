@@ -19,7 +19,15 @@
   let lobbyPoll = null;
 
   const header = () => `<div class="q-head"><span class="pill nowrap">🎓 Quiz di Simone</span>${myName ? `<span class="pill nowrap" style="background:#fff;max-width:50%;overflow:hidden;text-overflow:ellipsis">${C.esc(myName)}</span>` : ""}</div>`;
-  const show = (html) => { main.innerHTML = html; };
+  // Riga compatta per domanda/attesa/esito: numero domanda, nome, timer (facoltativo)
+  const qTop = (s, withTimer) => `
+    <div class="q-top">
+      <span class="pill">${s.q_index + 1}/${Q.length}</span>
+      <span class="q-name">${C.esc(myName)}</span>
+      ${withTimer ? `<div class="timer" id="t">${Math.ceil(C.remaining(s))}</div>` : ""}
+    </div>
+    ${withTimer ? '<div class="timebar"><div id="bar"></div></div>' : ""}`;
+  const show = (html) => { main.innerHTML = html; window.scrollTo(0, 0); };
   const stopTimers = () => { clearInterval(ticker); clearInterval(lobbyPoll); ticker = lobbyPoll = null; };
 
   function preloadImages() {
@@ -72,6 +80,7 @@
   // ---------- Partita ----------
   function startGame() {
     preloadImages();
+    C.keepAwake();
     viewKey = "";
     C.watchState(render);
   }
@@ -125,12 +134,10 @@
     if (answered[qi] !== undefined) return renderWaiting(s, answered[qi]);
 
     show(`
-      <section class="screen">
-        ${header()}
-        <div class="q-head"><span class="pill">Domanda ${qi + 1} di ${Q.length}</span><div class="timer" id="t">${Math.ceil(C.remaining(s))}</div></div>
-        <div class="timebar"><div id="bar"></div></div>
+      <section class="screen fit">
+        ${qTop(s, true)}
         <h2 class="q-text">${C.esc(q.q)}</h2>
-        <img class="q-img" src="${q.img}" alt="">
+        <div class="img-wrap"><img src="${q.img}" alt=""></div>
         <div class="answers" id="answers">${q.a.map((a, i) => C.answerButton(i, a)).join("")}</div>
       </section>`);
 
@@ -176,10 +183,8 @@
     const q = Q[s.q_index];
     const sent = choice !== null && choice !== undefined;
     show(`
-      <section class="screen">
-        ${header()}
-        <div class="q-head"><span class="pill">Domanda ${s.q_index + 1} di ${Q.length}</span><div class="timer" id="t">${Math.ceil(C.remaining(s))}</div></div>
-        <div class="timebar"><div id="bar"></div></div>
+      <section class="screen fit">
+        ${qTop(s, true)}
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:14px">
           <div class="bounce" style="font-size:56px">${sent ? "🤞" : "⏰"}</div>
           <h2 class="big-title">${title || (sent ? "Risposta inviata!" : "Tempo scaduto!")}</h2>
@@ -193,7 +198,7 @@
   async function renderReveal(s) {
     const qi = s.q_index;
     const q = Q[qi];
-    show(`<section class="screen center">${header()}<p class="dots">Vediamo</p></section>`);
+    show(`<section class="screen">${qTop(s, false)}<div class="screen center"><p class="dots">Vediamo</p></div></section>`);
     let r = null;
     try {
       const rows = await C.rpc("my_result", { p_player: pid, p_q: qi });
@@ -202,22 +207,25 @@
     if (viewKey !== `${s.phase}|${s.q_index}|${s.q_started_at}`) return; // nel frattempo è cambiato tutto
 
     const mine = r && r.choice !== null ? r.choice : answered[qi];
+    const hasMine = mine !== undefined && mine !== null;
+    const ok = r ? r.correct : hasMine && mine === s.correct;
+    const total = r ? `<p class="total">Totale: <b>${r.score}</b> punti</p>` : "";
     let box;
-    if (r && r.correct) box = `<div class="card result ok"><div class="big">Giusto! 🎉</div><p style="font-size:22px;font-weight:800">+${r.points} punti</p></div>`;
-    else if (mine !== undefined && mine !== null) box = `<div class="card result ko"><div class="big">Sbagliato 😬</div><p>Simone si sente tradito.</p></div>`;
-    else box = `<div class="card result ko"><div class="big">Niente risposta 💤</div><p>Il buffet ha avuto la meglio?</p></div>`;
+    if (ok) box = `<div class="card result ok"><div class="big">Giusto! 🎉</div><p class="gain">+${r ? r.points : ""} punti</p>${total}</div>`;
+    else if (hasMine) box = `<div class="card result ko"><div class="big">Sbagliato 😬</div><p>Simone si sente tradito.</p>${total}</div>`;
+    else box = `<div class="card result ko"><div class="big">Niente risposta 💤</div><p>Il buffet ha avuto la meglio?</p>${total}</div>`;
 
+    const correctBtn = C.answerButton(s.correct, q.a[s.correct], "correct").replace("</button>", '<span class="tick">✔</span></button>');
     show(`
       <section class="screen">
-        ${header()}
-        <span class="pill" style="align-self:flex-start">Domanda ${qi + 1} di ${Q.length}</span>
+        ${qTop(s, false)}
         ${box}
-        <div class="card" style="text-align:center"><p class="small muted">I tuoi punti</p><p style="font-size:30px;font-weight:800">${r ? r.score : "—"}</p></div>
-        <h3>${C.esc(q.q)}</h3>
-        <div class="answers">${q.a.map((a, i) => {
-          const cls = i === s.correct ? "correct" : "dim";
-          return C.answerButton(i, a, cls + (i === mine ? " chosen" : "")).replace("</button>", i === s.correct ? '<span class="tick">✔</span></button>' : "</button>");
-        }).join("")}</div>
+        <p class="small muted">${C.esc(q.q)}</p>
+        <div class="answers">
+          <p class="small label"><b>Risposta giusta</b></p>
+          ${correctBtn}
+          ${hasMine && !ok ? `<p class="small muted label">Tu avevi detto</p>${C.answerButton(mine, q.a[mine], "dim")}` : ""}
+        </div>
       </section>`);
     document.querySelectorAll(".ans").forEach((b) => { b.disabled = true; });
   }

@@ -66,7 +66,7 @@
     });
   }
 
-  function start() { viewKey = ""; C.watchState(render); }
+  function start() { viewKey = ""; C.keepAwake(); C.watchState(render); }
 
   function render(s) {
     state = s;

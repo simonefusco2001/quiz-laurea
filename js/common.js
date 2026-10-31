@@ -27,6 +27,15 @@
 
     now() { return Date.now() + this.offset; },
 
+    // Tiene lo schermo acceso finché la pagina è aperta (dove il telefono lo permette).
+    keepAwake() {
+      if (!("wakeLock" in navigator)) return;
+      const ask = () => { navigator.wakeLock.request("screen").catch(() => { /* non supportato o negato */ }); };
+      ask();
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) ask(); });
+      document.addEventListener("click", ask, { once: true }); // alcuni browser lo concedono solo dopo un tocco
+    },
+
     remaining(s) {
       if (!s || !s.q_started_at) return 0;
       const end = new Date(s.q_started_at).getTime() + s.q_seconds * 1000;

@@ -1,3 +1,6 @@
 .claude/
 js/.claude/
 supabase-setup.sql
+mock.html
+mock-host.html
+js/mock.js
